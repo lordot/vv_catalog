@@ -32,8 +32,9 @@ def _upsert_products(db: Session, products: list[dict]) -> int:
         p["last_updated"] = now
 
     stmt = pg_insert(Product).values(products)
-    # On conflict: update all fields except id
-    update_cols = {c.name: c for c in stmt.excluded if c.name != "id"}
+    # On conflict: only update fields present in data, preserve others (type_id, nutrition, etc.)
+    present_keys = {k for p in products for k in p} - {"id"}
+    update_cols = {k: stmt.excluded[k] for k in present_keys}
     stmt = stmt.on_conflict_do_update(index_elements=["id"], set_=update_cols)
     db.execute(stmt)
     db.commit()
