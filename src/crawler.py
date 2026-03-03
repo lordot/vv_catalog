@@ -51,6 +51,7 @@ async def _crawl_section(
     """Crawl one catalog section (paginated). Returns total products found."""
     parser = ProductParser()
     total = 0
+    found_ids = set()
 
     for page_num in range(1, 100):
         url = settings.base_url + path + f"?PAGEN_1={page_num}"
@@ -63,8 +64,19 @@ async def _crawl_section(
 
         rows = [p.model_dump(exclude_none=True) for p in products]
         _upsert_products(db, rows)
+        found_ids.update(p.id for p in products)
         total += len(products)
         logger.info(f"Section {path} page {page_num}: {len(products)} products")
+
+    if found_ids:
+        removed = (
+            db.query(Product)
+            .filter(Product.subtype_id == subtype_id, Product.id.notin_(found_ids))
+            .delete(synchronize_session="fetch")
+        )
+        if removed:
+            db.commit()
+            logger.info(f"Section {path}: removed {removed} stale products")
 
     return total
 
