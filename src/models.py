@@ -27,13 +27,11 @@ class Product(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(nullable=True)
-    price: Mapped[float] = mapped_column(nullable=True)
     type_id: Mapped[int] = mapped_column(ForeignKey("types.id"), nullable=True)
     type: Mapped["Type"] = relationship(back_populates="products")
     subtype_id: Mapped[int] = mapped_column(ForeignKey("subtypes.id"))
     subtype: Mapped["SubType"] = relationship(back_populates="products")
     count: Mapped[int] = mapped_column(default=1)
-    exist: Mapped[float] = mapped_column(default=0)
     image: Mapped[str] = mapped_column(nullable=True)
     link: Mapped[str] = mapped_column(nullable=True)
     ccals: Mapped[float] = mapped_column(nullable=True)

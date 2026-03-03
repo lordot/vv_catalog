@@ -89,8 +89,14 @@ class ProductParser:
         weight_tag = soup.find(class_="ProductCard__weight")
         weight = 0
         if weight_tag:
-            digits = re.findall(r"\d+", weight_tag.get_text(strip=True))
-            weight = int("".join(digits)) if digits else 0
+            text = weight_tag.get_text(strip=True)
+            if '(' in text:
+                text = text[:text.index('(')]
+            weight = sum(
+                int(re.findall(r"\d+", part)[0])
+                for part in text.split('/')
+                if re.findall(r"\d+", part)
+            )
 
         # Name
         name_elem = soup.find("meta", property="og:title")
@@ -142,18 +148,11 @@ class ProductParser:
                     continue
 
                 product_id = link_elem.get("data-id")
-                price_tag = card.find(class_="js-datalayer-catalog-list-price")
-                price_text = price_tag.get_text() if price_tag else "0"
                 image_tag = card.find(class_="ProductCard__imageImg")
                 image = image_tag.get("src", "") if image_tag else ""
-                button = card.find(class_="CartButton__content")
-                exist = button.get("data-max", "0") if button else "0"
-
-                price_match = re.findall(r"^([0-9]*[.]?[0-9]*)", price_text)
-                price = float(price_match[0]) if price_match and price_match[0] else 0
 
                 result.append(
-                    schemas.Product(id=product_id, price=price, image=image, exist=exist)
+                    schemas.Product(id=product_id, image=image)
                 )
             except Exception as e:
                 logger.exception(f"Error parsing green product: {e}")

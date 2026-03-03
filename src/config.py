@@ -32,6 +32,7 @@ PAGES: tuple = (
     ("/goods/gotovaya-eda/pirogi-pirozhki-i-lepyeshki/", 12, None),
     ("/goods/sladosti-i-deserty/pirozhnye-i-deserty/", 13, None),
     ("/goods/khleb-i-vypechka/kruassany/", 14, None),
+    ("/goods/gotovaya-eda/onigiri/", 18, None),
 )
 
 FAMILY_PAGES: tuple = (
