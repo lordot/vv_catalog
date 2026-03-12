@@ -97,6 +97,34 @@ def get_subtypes(db: Session = Depends(get_db)):
     return {"total": sum(r.product_count for r in rows), "items": items}
 
 
+@app.get("/subtypes/by_category")
+def get_subtypes_by_category(db: Session = Depends(get_db)):
+    """Return subtypes grouped by meal category based on actual products in catalog.
+    A subtype appears in a category if there's at least one product with that subtype_id."""
+    all_subtypes = db.query(SubType).all()
+    subtype_map = {st.id: st.name for st in all_subtypes}
+
+    # Get all subtype_ids that have at least one product
+    rows = (
+        db.query(Product.subtype_id)
+        .filter(Product.subtype_id.isnot(None))
+        .distinct()
+        .all()
+    )
+    active_subtype_ids = {r.subtype_id for r in rows}
+
+    # All active subtypes available in all categories
+    categories = ["breakfast", "soup", "lunch", "snack", "dinner", "dessert"]
+    result = {}
+    for cat in categories:
+        result[cat] = [
+            {"id": sid, "name": subtype_map[sid]}
+            for sid in sorted(active_subtype_ids)
+            if sid in subtype_map
+        ]
+    return result
+
+
 def _product_to_dict(p: Product) -> dict:
     return {
         "id": p.id,
