@@ -104,3 +104,39 @@ async def test_a_section_stops_when_a_page_brings_no_new_products(monkeypatch):
     total = await crawler._crawl_section(_F(), _DB(), "/x/", 1, None)
     assert total == 5
     assert len(pages) == 3      # page 1, page 2, page 3 (repeat → stop)
+
+
+@pytest.mark.asyncio
+async def test_a_family_section_stops_when_a_page_repeats(monkeypatch):
+    from src import schemas
+
+    pages = []
+
+    class _F:
+        async def fetch_page(self, url):
+            pages.append(url)
+            return url
+
+    def parse(content):
+        n = int(content.rsplit("=", 1)[1])
+        ids = [1, 2] if n == 1 else [3]
+        return [schemas.Product(id=i, count=2) for i in ids]
+
+    class _Q:
+        def filter_by(self, **kw):
+            return self
+
+        def first(self):
+            return None
+
+    class _DB:
+        def query(self, *a):
+            return _Q()
+
+        def commit(self):
+            pass
+
+    monkeypatch.setattr(crawler.ProductParser, "parse_family_page", staticmethod(parse))
+    monkeypatch.setattr(crawler.settings, "request_delay", 0)
+    total = await crawler._crawl_family_section(_F(), _DB(), "/fam/")
+    assert total == 3 and len(pages) == 3

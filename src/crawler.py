@@ -101,15 +101,18 @@ async def _crawl_family_section(
     """Crawl family-format section. Only updates count=2 for existing products."""
     parser = ProductParser()
     total = 0
+    seen: set[int] = set()
 
     for page_num in range(1, 100):
         url = settings.base_url + path + f"?PAGEN_1={page_num}"
         content = await fetcher.fetch_page(url)
         await asyncio.sleep(settings.request_delay)
 
-        products = parser.parse_family_page(content)
+        # the site repeats the last page past the end (see _crawl_section)
+        products = [p for p in parser.parse_family_page(content) if p.id not in seen]
         if not products:
             break
+        seen.update(p.id for p in products)
 
         # Only update existing products (set count=2)
         for p in products:
