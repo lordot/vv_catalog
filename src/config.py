@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     section_pause: float = 1800.0       # seconds between sections (30 min) in CONTINUOUS mode
     retry_base_delay: float = 5.0       # base delay on 502 retry
     retry_max_delay: float = 60.0       # max delay on 502 retry
+    cycle_retry_delay: float = 60.0     # pause before the next cycle after a failed one
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

@@ -140,32 +140,48 @@ async def _crawl_product_details(
 
 
 async def _run_full_cycle(fetcher: CatalogFetcher, pause_between_sections: float):
-    """Run one full cycle through all catalog sections + product details."""
+    """Run one full cycle through all catalog sections + product details.
+
+    Every section and the details pass get a DB session of their own: a cycle
+    takes hours in CONTINUOUS mode, and one session held across it died with
+    the first dropped Postgres connection (2026-05 → 2026-10 stale catalog)."""
+    total = 0
+
+    for path, subtype_id, name_filter in PAGES:
+        db = SessionLocal()
+        try:
+            count = await _crawl_section(fetcher, db, path, subtype_id, name_filter)
+        finally:
+            db.close()
+        total += count
+        logger.info(f"Section {path}: {count} products")
+        if pause_between_sections > 0:
+            await asyncio.sleep(pause_between_sections)
+
+    for path in FAMILY_PAGES:
+        db = SessionLocal()
+        try:
+            count = await _crawl_family_section(fetcher, db, path)
+        finally:
+            db.close()
+        logger.info(f"Family section {path}: {count} products")
+        if pause_between_sections > 0:
+            await asyncio.sleep(pause_between_sections)
+
     db = SessionLocal()
     try:
-        total = 0
-
-        for path, subtype_id, name_filter in PAGES:
-            count = await _crawl_section(fetcher, db, path, subtype_id, name_filter)
-            total += count
-            logger.info(f"Section {path}: {count} products")
-            if pause_between_sections > 0:
-                await asyncio.sleep(pause_between_sections)
-
-        for path in FAMILY_PAGES:
-            count = await _crawl_family_section(fetcher, db, path)
-            logger.info(f"Family section {path}: {count} products")
-            if pause_between_sections > 0:
-                await asyncio.sleep(pause_between_sections)
-
         await _crawl_product_details(fetcher, db)
-        logger.info(f"Full cycle complete: {total} catalog products")
     finally:
         db.close()
+    logger.info(f"Full cycle complete: {total} catalog products")
 
 
 async def run():
-    """Main entry point: INIT if empty, then CONTINUOUS forever."""
+    """Main entry point: INIT if empty, then CONTINUOUS forever.
+
+    A failed cycle is logged and retried after `cycle_retry_delay`; only a
+    cancellation stops the loop. Before 2026-10-26 the first exception killed
+    the task silently and the catalog froze until the next pod restart."""
     async with CatalogFetcher() as fetcher:
         if _db_is_empty():
             logger.info("DB is empty — running INIT mode (no inter-section pauses)")
@@ -174,5 +190,13 @@ async def run():
 
         logger.info("Entering CONTINUOUS mode")
         while True:
-            await _run_full_cycle(fetcher, pause_between_sections=settings.section_pause)
-            logger.info("CONTINUOUS cycle done, restarting...")
+            try:
+                await _run_full_cycle(fetcher, pause_between_sections=settings.section_pause)
+                logger.info("CONTINUOUS cycle done, restarting...")
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception(
+                    f"Crawl cycle failed, retrying in {settings.cycle_retry_delay:.0f}s"
+                )
+                await asyncio.sleep(settings.cycle_retry_delay)
