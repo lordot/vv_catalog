@@ -48,17 +48,22 @@ async def _crawl_section(
     subtype_id: int,
     name_filter: str | None,
 ) -> int:
-    """Crawl one catalog section (paginated). Returns total products found."""
+    """Crawl one catalog section (paginated). Returns total products found.
+
+    vkusvill.ru answers `PAGEN_1` past the last page with the last page again
+    (never an empty list), so a page that brings no product we have not seen
+    in this section ends it."""
     parser = ProductParser()
     total = 0
-    found_ids = set()
+    found_ids: set[int] = set()
 
     for page_num in range(1, 100):
         url = settings.base_url + path + f"?PAGEN_1={page_num}"
         content = await fetcher.fetch_page(url)
         await asyncio.sleep(settings.request_delay)
 
-        products = parser.parse_catalog_page(content, subtype_id, name_filter)
+        products = [p for p in parser.parse_catalog_page(content, subtype_id, name_filter)
+                    if p.id not in found_ids]
         if not products:
             break
 
@@ -69,16 +74,23 @@ async def _crawl_section(
         logger.info(f"Section {path} page {page_num}: {len(products)} products")
 
     if found_ids:
-        removed = (
-            db.query(Product)
-            .filter(Product.subtype_id == subtype_id, Product.id.notin_(found_ids))
-            .delete(synchronize_session="fetch")
-        )
+        removed = _remove_stale(db, subtype_id, found_ids)
         if removed:
-            db.commit()
             logger.info(f"Section {path}: removed {removed} stale products")
 
     return total
+
+
+def _remove_stale(db: Session, subtype_id: int, found_ids: set[int]) -> int:
+    """Drop products of the subtype that the current crawl did not see."""
+    removed = (
+        db.query(Product)
+        .filter(Product.subtype_id == subtype_id, Product.id.notin_(found_ids))
+        .delete(synchronize_session="fetch")
+    )
+    if removed:
+        db.commit()
+    return removed
 
 
 async def _crawl_family_section(

@@ -51,7 +51,7 @@ Background task started in FastAPI lifespan. Two modes:
 2. **CONTINUOUS mode**: Infinite loop, crawl all sections with 30-min pauses between sections
 
 **Crawl cycle**: For each section in `PAGES`:
-1. Paginate through catalog pages (`?PAGEN_1=N`)
+1. Paginate through catalog pages (`?PAGEN_1=N`) — a page that brings no product unseen in this section ends it (vkusvill.ru repeats the last page instead of answering an empty one, seen 2026-10-26)
 2. Parse products from HTML
 3. Upsert into PostgreSQL (ON CONFLICT DO UPDATE)
 4. Remove stale products not found in current crawl
