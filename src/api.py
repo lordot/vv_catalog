@@ -28,6 +28,22 @@ def get_db():
         db.close()
 
 
+def _crawler_finished(task: asyncio.Task) -> None:
+    """The crawler is meant to run forever: say so loudly if it ever stops."""
+    if task.cancelled():
+        logger.info("Crawler task cancelled")
+    elif task.exception() is not None:
+        logger.error("Crawler task died: %r", task.exception())
+    else:
+        logger.error("Crawler task finished unexpectedly")
+
+
+def _start_crawler() -> asyncio.Task:
+    task = asyncio.create_task(run_crawler())
+    task.add_done_callback(_crawler_finished)
+    return task
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
@@ -39,7 +55,7 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
 
-    app.state.crawler_task = asyncio.create_task(run_crawler())
+    app.state.crawler_task = _start_crawler()
     app.state.scan_running = False
     logger.info("Catalog API started, crawler running in background")
     yield
@@ -222,7 +238,7 @@ async def _forced_scan():
         logger.info("Forced scan complete")
     finally:
         app.state.scan_running = False
-        app.state.crawler_task = asyncio.create_task(run_crawler())
+        app.state.crawler_task = _start_crawler()
         logger.info("Continuous crawler restarted")
 
 
